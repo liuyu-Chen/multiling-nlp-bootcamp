@@ -1,5 +1,7 @@
 from gensim.models import Word2Vec
 from gensim.models.word2vec import LineSentence
+from collections import Counter
+
 
 # 读取语料：一行一句，词语之间用空格分隔
 sentences = LineSentence("train.txt")
@@ -10,8 +12,8 @@ model = Word2Vec(
     vector_size=50,  # 每个词用50维向量表示
     window=3,        # 查看目标词前后最多3个词
     min_count=1,     # 出现至少1次就保留，适合小语料
-    sg=1,            # 1为Skip-gram，0为CBOW
-    negative=5,
+    sg=1,            # 使用Skip-gram：通过中心词预测周围词
+    negative=5,     # 每个正样本搭配5个随机负样本
     workers=1,       # 单线程，减少训练顺序变化
     epochs=100,  # 将全部语料学习100遍
     seed=42     # 固定随机初始状态
@@ -39,3 +41,75 @@ for word in query_words:
         print("这个词不在词表中")
 
 print("\n训练完成，模型已保存为 word2vec.model")
+
+# 3. 词频统计
+# =========================
+
+# 把所有句子中的词放在一起
+all_words = []
+
+for sentence in sentences:
+    all_words.extend(sentence)
+
+# 统计每个词出现的次数
+word_counts = Counter(all_words)
+
+print(f"总词数：{len(all_words)}")
+print(f"不同词语数量：{len(word_counts)}")
+
+print("\n词频最高的20个词：")
+
+for word, count in word_counts.most_common(20):
+    print(f"{word}: {count}")
+
+# 4. 五组近邻词查询
+# =========================
+
+# 选择5个目标词，这些词必须出现在train.txt中
+query_words = [
+    "机器",
+    "学习",
+    "数据",
+    "模型",
+    "语言"
+]
+
+# 防止词表太小，无法返回5个近邻词
+topn = min(5, len(model.wv) - 1)
+
+# 将结果同时打印到控制台并保存到文件
+with open("nearest_words.txt", "w", encoding="utf-8") as output_file:
+
+    for group_number, word in enumerate(query_words, start=1):
+        title = f"\n第{group_number}组，目标词：{word}"
+
+        print(title)
+        output_file.write(title + "\n")
+
+        # 检查查询词是否在模型词表中
+        if word not in model.wv:
+            message = "该词不在模型词表中"
+
+            print(message)
+            output_file.write(message + "\n")
+            continue
+
+        # 查询与目标词最接近的5个词
+        results = model.wv.most_similar(
+            positive=[word],
+            topn=topn
+        )
+
+        for rank, (similar_word, score) in enumerate(
+            results,
+            start=1
+        ):
+            result_line = (
+                f"{rank}. {similar_word}: "
+                f"{score:.10f}"
+            )
+
+            print(result_line)
+            output_file.write(result_line + "\n")
+
+print("\n五组近邻词查询完成")
